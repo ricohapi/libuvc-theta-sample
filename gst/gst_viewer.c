@@ -182,12 +182,16 @@ main(int argc, char **argv)
 
 	src.framecount = 0;
 	res = thetauvc_find_device(ctx, &dev, 0);
-	if (res != UVC_SUCCESS)
+	if (res != UVC_SUCCESS) {
+		fprintf(stderr, "THETA not found\n");
 		goto exit;
+	}
 
 	res = uvc_open(dev, &devh);
-	if (res != UVC_SUCCESS)
+	if (res != UVC_SUCCESS) {
+		fprintf(stderr, "Can't open THETA\n");
 		goto exit;
+	}
 
 	gst_element_set_state(src.pipeline, GST_STATE_PLAYING);
 	pthread_create(&thr, NULL, app_mainloop, &src);
@@ -198,21 +202,22 @@ main(int argc, char **argv)
 	src.dwClockFrequency = ctrl.dwClockFrequency;
 
 	res = uvc_start_streaming(devh, &ctrl, cb, &src, 0);
-	if (res != UVC_SUCCESS)
-		goto exit;
+	if (res == UVC_SUCCESS) {
+		fprintf(stderr, "start, hit any key to stop\n");
+		read(1, keyin, 1);
+		fprintf(stderr, "stop\n");
+		uvc_stop_streaming(devh);
 
-	fprintf(stderr, "start, hit any key to stop\n");
-	read(1, keyin, 1);
-	fprintf(stderr, "stop\n");
-	uvc_stop_streaming(devh);
+		g_main_loop_quit(src.loop);
+		pthread_join(thr, NULL);
 
-exit:
-	g_main_loop_quit(src.loop);
-	pthread_join(thr, NULL);
-
-	gst_element_set_state(src.pipeline, GST_STATE_NULL);
-	g_main_loop_unref(src.loop);
+		gst_element_set_state(src.pipeline, GST_STATE_NULL);
+		g_main_loop_unref(src.loop);
+	}
 
 	uvc_close(devh);
+
+exit:
 	uvc_exit(ctx);
+	return res;
 }

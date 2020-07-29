@@ -41,3 +41,6 @@ OBJS := $(SRCS:.c=.o)
 
 gst_viewer: $(OBJS)
 	$(CC) $(OBJS) -o $@  $(LDFLAGS) -pthread
+
+clean:
+	@$(RM) $(OBJS) gst_viewer
