@@ -37,10 +37,15 @@ LDFLAGS += $(shell pkg-config --libs $(PKG_CONFIG_LIB))
 
 SRCS = gst_viewer.c thetauvc.c
 OBJS := $(SRCS:.c=.o)
+EXES = gst_viewer gst_loopback
 
+all: $(EXES)
 
 gst_viewer: $(OBJS)
 	$(CC) $(OBJS) -o $@  $(LDFLAGS) -pthread
 
+gst_loopback: gst_viewer
+	ln -sf $< $@
+
 clean:
-	@$(RM) $(OBJS) gst_viewer
+	@$(RM) $(OBJS) $(EXES)

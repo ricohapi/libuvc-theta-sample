@@ -42,6 +42,8 @@
 #include "libuvc/libuvc.h"
 #include "thetauvc.h"
 
+#define MAX_PIPELINE_LEN 1024
+
 struct gst_src {
 	GstElement *pipeline;
 	GstElement *appsrc;
@@ -50,23 +52,49 @@ struct gst_src {
 	GTimer *timer;
 	guint framecount;
 	guint id;
+	guint bus_watch_id;
 	uint32_t dwFrameInterval;
 	uint32_t dwClockFrequency;
 };
 
 struct gst_src src;
 
+static gboolean
+gst_bus_cb(GstBus *bus, GstMessage *message, gpointer data)
+{
+	GError *err;
+	gchar *dbg;
+
+	switch (GST_MESSAGE_TYPE(message)) {
+	case GST_MESSAGE_ERROR:
+		gst_message_parse_error(message, &err, &dbg);
+		g_print("Error: %s\n", err->message);
+		g_error_free(err);
+		g_free(dbg);
+		g_main_loop_quit(src.loop);
+		break;
+
+	default:
+		break;
+	}
+
+	return TRUE;
+}
+
+
 int
-gst_src_init(int *argc, char ***argv)
+gst_src_init(int *argc, char ***argv, char *pipeline)
 {
 	GstCaps *caps;
+	GstBus *bus;
+	char pipeline_str[MAX_PIPELINE_LEN];
+
+	snprintf(pipeline_str, MAX_PIPELINE_LEN, "appsrc name=ap ! queue ! h264parse ! queue ! %s ", pipeline);
 
 	gst_init(argc, argv);
 	src.timer = g_timer_new();
 	src.loop = g_main_loop_new(NULL, TRUE);
-	src.pipeline = gst_parse_launch("appsrc name=ap ! queue ! h264parse ! "
-		" decodebin ! autovideosink sync=false"
-		, NULL);
+	src.pipeline = gst_parse_launch(pipeline_str, NULL);
 
 	g_assert(src.pipeline);
 	if (src.pipeline == NULL)
@@ -81,17 +109,23 @@ gst_src_init(int *argc, char ***argv)
 		"profile", G_TYPE_STRING, "constrained-baseline", NULL);
 	gst_app_src_set_caps(GST_APP_SRC(src.appsrc), caps);
 
+	bus = gst_pipeline_get_bus(GST_PIPELINE(src.pipeline));
+	src.bus_watch_id = gst_bus_add_watch(bus, gst_bus_cb, NULL);
+	gst_object_unref(bus);
 	return TRUE;
 }
 
 void *
-app_mainloop(void *arg)
+keywait(void *arg)
 {
 	struct gst_src *s;
+	char keyin[4];
 
-	printf("start thread\n");
+	read(1, keyin, 1);
+
 	s = (struct gst_src *)arg;
-	g_main_loop_run(s->loop);
+	g_main_loop_quit(s->loop);
+
 }
 
 void
@@ -141,9 +175,18 @@ main(int argc, char **argv)
 
 	struct gst_src *s;
 	int idx;
-	char keyin[4];
+	char *pipe_proc;
+	char *cmd_name;
 
-	if (!gst_src_init(&argc, &argv))
+	cmd_name = rindex(argv[0], '/');
+	if (strcmp(cmd_name+1, "gst_loopback") == 0)
+		pipe_proc = "decodebin ! autovideoconvert ! "
+			"video/x-raw,format=I420 ! identity drop-allocation=true !"
+			"v4l2sink device=/dev/video1 sync=false";
+	else
+		pipe_proc = " decodebin ! autovideosink sync=false";
+
+	if (!gst_src_init(&argc, &argv, pipe_proc))
 		return -1;
 
 	res = uvc_init(&ctx, NULL);
@@ -194,7 +237,7 @@ main(int argc, char **argv)
 	}
 
 	gst_element_set_state(src.pipeline, GST_STATE_PLAYING);
-	pthread_create(&thr, NULL, app_mainloop, &src);
+	pthread_create(&thr, NULL, keywait, &src);
 	
 	res = thetauvc_get_stream_ctrl_format_size(devh,
 			THETAUVC_MODE_UHD_2997, &ctrl);
@@ -204,15 +247,17 @@ main(int argc, char **argv)
 	res = uvc_start_streaming(devh, &ctrl, cb, &src, 0);
 	if (res == UVC_SUCCESS) {
 		fprintf(stderr, "start, hit any key to stop\n");
-		read(1, keyin, 1);
+		g_main_loop_run(src.loop);
+
 		fprintf(stderr, "stop\n");
 		uvc_stop_streaming(devh);
 
-		g_main_loop_quit(src.loop);
-		pthread_join(thr, NULL);
-
 		gst_element_set_state(src.pipeline, GST_STATE_NULL);
+		g_source_remove(src.bus_watch_id);
 		g_main_loop_unref(src.loop);
+
+		pthread_cancel(thr);
+		pthread_join(thr, NULL);
 	}
 
 	uvc_close(devh);
