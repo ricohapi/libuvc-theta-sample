@@ -179,7 +179,12 @@ main(int argc, char **argv)
 	char *cmd_name;
 
 	cmd_name = rindex(argv[0], '/');
-	if (strcmp(cmd_name+1, "gst_loopback") == 0)
+	if (cmd_name == NULL)
+		cmd_name = argv[0];
+	else
+		cmd_name++;
+
+	if (strcmp(cmd_name, "gst_loopback") == 0)
 		pipe_proc = "decodebin ! autovideoconvert ! "
 			"video/x-raw,format=I420 ! identity drop-allocation=true !"
 			"v4l2sink device=/dev/video1 sync=false";
