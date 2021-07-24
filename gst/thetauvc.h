@@ -53,7 +53,7 @@ extern uvc_error_t thetauvc_run_streaming(uvc_device_t *, uvc_device_handle_t **
 	unsigned int, uvc_frame_callback_t *, void *);
 
 
-#if defined(__cplsplus)
+#if defined(__cplusplus)
 }
 #endif
 #endif
