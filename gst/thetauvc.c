@@ -41,6 +41,7 @@
 #define USBVID_RICOH 0x05ca
 #define USBPID_THETAV_UVC 0x2712
 #define USBPID_THETAZ1_UVC 0x2715
+#define USBPID_THETAX_UVC 0x2717
 
 
 struct thetauvc_mode {
@@ -102,6 +103,7 @@ thetauvc_find_devices(uvc_context_t *ctx, uvc_device_t ***devs)
 			continue;
 
 		if (desc->idProduct == USBPID_THETAV_UVC
+			|| desc->idProduct == USBPID_THETAX_UVC
 			|| desc->idProduct == USBPID_THETAZ1_UVC) {
 			void *tmp_ptr;
 
