@@ -58,13 +58,13 @@ static thetauvc_mode_t stream_mode[] = {
 		.mode = THETAUVC_MODE_UHD_2997,
 		.width = 3840,
 		.height = 1920,
-		.fps = 29
+		.fps = 30
 	},
 	{
 		.mode = THETAUVC_MODE_FHD_2997,
 		.width = 1920,
 		.height = 960,
-		.fps = 29
+		.fps = 30
 	},
 	{
 		.mode = THETAUVC_MODE_NUM,
@@ -256,7 +256,7 @@ thetauvc_get_stream_ctrl_format_size(uvc_device_handle_t *devh,
 		return UVC_ERROR_INVALID_MODE;
 
 	m = &stream_mode[mode];
-
+  
 	res = uvc_get_stream_ctrl_format_size(devh, ctrl,
 			UVC_FRAME_FORMAT_H264, m->width, m->height, m->fps);
 
