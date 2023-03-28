@@ -58,10 +58,22 @@ static thetauvc_mode_t stream_mode[] = {
 		.mode = THETAUVC_MODE_UHD_2997,
 		.width = 3840,
 		.height = 1920,
-		.fps = 30
+		.fps = 29
 	},
 	{
 		.mode = THETAUVC_MODE_FHD_2997,
+		.width = 1920,
+		.height = 960,
+		.fps = 29
+	},
+	{
+		.mode = THETAUVC_MODE_UHD_30,
+		.width = 3840,
+		.height = 1920,
+		.fps = 30
+	},
+	{
+		.mode = THETAUVC_MODE_FHD_30,
 		.width = 1920,
 		.height = 960,
 		.fps = 30

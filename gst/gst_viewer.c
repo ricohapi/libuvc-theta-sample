@@ -43,6 +43,13 @@
 #include "thetauvc.h"
 
 #define MAX_PIPELINE_LEN 1024
+#define DEFAULT_CAM_MODE "UHD"
+#define DEFAULT_BITRATE 5000000
+#define DEFAULT_KFI 300
+// #define DEFAULT_RTP_ADDRESS "127.0.0.1"
+#define DEFAULT_RTP_ADDRESS "192.168.1.150"
+#define DEFAULT_RTP_PORT 6666
+#define DEFAULT_RTP_MAX_DELAY 150000
 
 struct gst_src {
   GstElement *pipeline;
@@ -58,6 +65,28 @@ struct gst_src {
 };
 
 struct gst_src src;
+
+struct stream_parameters {
+  enum thetauvc_mode_code mode;
+  uint32_t bitrate;     // bps
+  uint32_t max_bitrate; // bps
+  uint32_t kfi;         // Key Frame Interval (# frames)
+  char *address;
+  uint16_t port;
+  uint32_t max_delay;   // us
+};
+
+void print_help()
+{
+  printf("Options:\n");
+  printf("\t-m: Resolution Mode. Accepted values: UHD, FHD. Default: %s\n", DEFAULT_CAM_MODE);
+  printf("\t-b: bitrate (bps). Default: %i\n", DEFAULT_BITRATE);
+  printf("\t-k: Keyframe Interval (frames). Default: %i\n", DEFAULT_KFI);
+  printf("\t-a: RTP address. Default: %s\n", DEFAULT_RTP_ADDRESS);
+  printf("\t-p: RTP port. Default: %i\n", DEFAULT_RTP_PORT);
+  printf("\t-d: RTP max delay (us). Default: %i\n", DEFAULT_RTP_MAX_DELAY);
+  exit(0);
+}
 
 static gboolean
 gst_bus_cb(GstBus *bus, GstMessage *message, gpointer data)
@@ -173,10 +202,13 @@ main(int argc, char **argv)
   pthread_t thr;
   pthread_attr_t attr;
 
+  struct stream_parameters cam_params;
+
   struct gst_src *s;
   int idx;
-  char *pipe_proc;
+  char pipe_proc[MAX_PIPELINE_LEN];
   char *cmd_name;
+  int opt;
 
   cmd_name = rindex(argv[0], '/');
   if (cmd_name == NULL)
@@ -184,16 +216,68 @@ main(int argc, char **argv)
   else
     cmd_name++;
 
-  if (strcmp(cmd_name, "gst_loopback") == 0)
-    pipe_proc = "decodebin ! autovideoconvert ! "
-      "video/x-raw,format=I420 ! identity drop-allocation=true !"
-      "v4l2sink device=/dev/video1 sync=false";
+  cam_params.bitrate = DEFAULT_BITRATE;
+  cam_params.max_bitrate = cam_params.bitrate * 1.5;
+  if (strcmp(DEFAULT_CAM_MODE, "UHD"))
+    cam_params.mode = THETAUVC_MODE_UHD_30;
+  else if (strcmp(DEFAULT_CAM_MODE, "FHD"))
+    cam_params.mode = THETAUVC_MODE_FHD_30;
   else
-    // pipe_proc = " decodebin ! autovideosink sync=false";
-    // pipe_proc = " h264parse config-interval=1 ! rtph264pay pt=96 config-interval=1 ! rtprateshape max-delay-us=150000 max-bitrate=15000000 ! udpsink host=192.168.1.150 port=6666";
-    pipe_proc = " omxh264dec ! omxh264enc insert-sps-pps=true profile=main control-rate=constant-skip-frames preset-level=FastPreset bitrate=5000000 iframeinterval=300 ! h264parse config-interval=1 ! rtph264pay pt=96 config-interval=1 ! rtprateshape max-delay-us=150000 max-bitrate=15000000 ! udpsink host=192.168.1.150 port=6666";
-    // pipe_proc = " -v decodebin ! x264enc tune=zerolatency bitrate=500 speed-preset=superfast ! h264parse config-interval=1 ! rtph264pay pt=96 config-interval=1 ! rtprateshape max-delay-us=150000 max-bitrate=15000000 ! udpsink host=192.168.1.150 port=6666";
-    // pipe_proc = " -v decodebin ! x264enc tune=zerolatency bitrate=500 speed-preset=superfast ! rtph264pay ! udpsink host=127.0.0.1 port=6666";
+    cam_params.mode = THETAUVC_MODE_UHD_2997;
+  cam_params.kfi = DEFAULT_KFI;
+  cam_params.address = DEFAULT_RTP_ADDRESS;
+  cam_params.port = DEFAULT_RTP_PORT;
+  cam_params.max_delay = DEFAULT_RTP_MAX_DELAY;
+  while ((opt = getopt(argc, argv, "b:d:m:k:a:p:h")) != -1) {
+    switch (opt) {
+      case 'b': cam_params.bitrate = (uint32_t) atoi(optarg); break;
+      case 'd': cam_params.max_delay = atoi(optarg); break;
+      case 'm':
+      {
+        if (strcmp(optarg, "UHD"))
+          cam_params.mode = THETAUVC_MODE_UHD_30;
+        else if (strcmp(optarg, "FHD"))
+          cam_params.mode = THETAUVC_MODE_FHD_30;
+        else
+          cam_params.mode = THETAUVC_MODE_UHD_2997;
+        break;
+      }
+      case 'k': cam_params.kfi = atoi(optarg); break;
+      case 'a': cam_params.address = optarg; break;
+      case 'p': cam_params.port = atoi(optarg); break;
+      case 'h': print_help(); break;
+      default:
+      {
+          fprintf(stderr, "Usage: %s [-bdmkaph] (-h for options meaning)\n", argv[0]);
+          exit(EXIT_FAILURE);
+      }
+    }
+  }
+  if (strcmp(cmd_name, "gst_loopback") == 0)
+    sprintf(pipe_proc,
+      "decodebin ! autovideoconvert ! "
+      "video/x-raw,format=I420 ! identity drop-allocation=true !"
+      "v4l2sink device=/dev/video1 sync=false"
+      );
+  else
+    sprintf(pipe_proc,
+      " omxh264dec ! "
+      "omxh264enc insert-sps-pps=true profile=main control-rate=constant-skip-frames "
+      "preset-level=FastPreset bitrate=%i, iframeinterval=%i ! "
+      "h264parse config-interval=1 ! "
+      "rtph264pay pt=96 config-interval=1 ! "
+      "rtprateshape max-delay-us=%i max-bitrate=%i ! "
+      "udpsink host=%s port=%i",
+      cam_params.bitrate,
+      cam_params.kfi,
+      cam_params.max_delay,
+      cam_params.max_bitrate,
+      cam_params.address,
+      cam_params.port
+      );
+
+  // TODO Remove (for developing purposes)
+  // printf(pipe_proc);
 
   if (!gst_src_init(&argc, &argv, pipe_proc))
     return -1;
@@ -234,7 +318,7 @@ main(int argc, char **argv)
   pthread_create(&thr, NULL, keywait, &src);
 
   res = thetauvc_get_stream_ctrl_format_size(devh,
-      THETAUVC_MODE_UHD_2997, &ctrl);
+      cam_params.mode, &ctrl);
   src.dwFrameInterval = ctrl.dwFrameInterval;
   src.dwClockFrequency = ctrl.dwClockFrequency;
 

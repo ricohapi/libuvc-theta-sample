@@ -37,9 +37,12 @@
 extern "C" {
 #endif
 
+// _30 are the valid ones for Theta X
 enum thetauvc_mode_code {
 	THETAUVC_MODE_UHD_2997 = 0,
 	THETAUVC_MODE_FHD_2997,
+	THETAUVC_MODE_UHD_30,
+	THETAUVC_MODE_FHD_30,
 	THETAUVC_MODE_NUM
 };
 
