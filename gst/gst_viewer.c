@@ -120,6 +120,8 @@ gst_src_init(int *argc, char ***argv, char *pipeline)
 
   snprintf(pipeline_str, MAX_PIPELINE_LEN, "appsrc name=ap ! queue ! h264parse ! queue ! %s ", pipeline);
 
+  fprintf(stderr, "%s/n", pipeline_str);
+
   gst_init(argc, argv);
   src.timer = g_timer_new();
   src.loop = g_main_loop_new(NULL, TRUE);
@@ -263,7 +265,7 @@ main(int argc, char **argv)
     sprintf(pipe_proc,
       " omxh264dec ! "
       "omxh264enc insert-sps-pps=true profile=main control-rate=constant-skip-frames "
-      "preset-level=FastPreset bitrate=%i, iframeinterval=%i ! "
+      "preset-level=FastPreset bitrate=%i iframeinterval=%i ! "
       "h264parse config-interval=1 ! "
       "rtph264pay pt=96 config-interval=1 ! "
       "rtprateshape max-delay-us=%i max-bitrate=%i ! "
@@ -275,9 +277,6 @@ main(int argc, char **argv)
       cam_params.address,
       cam_params.port
       );
-
-  // TODO Remove (for developing purposes)
-  // printf(pipe_proc);
 
   if (!gst_src_init(&argc, &argv, pipe_proc))
     return -1;
@@ -329,10 +328,9 @@ main(int argc, char **argv)
 
   res = uvc_start_streaming(devh, &ctrl, cb, &src, 0);
   if (res == UVC_SUCCESS) {
-    fprintf(stderr, "start, hit any key to stop\n");
     g_main_loop_run(src.loop);
 
-    fprintf(stderr, "stop\n");
+    fprintf(stderr, "stop streaming\n");
     uvc_stop_streaming(devh);
 
     gst_element_set_state(src.pipeline, GST_STATE_NULL);
