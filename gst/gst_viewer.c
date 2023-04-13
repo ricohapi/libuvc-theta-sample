@@ -344,6 +344,7 @@ main(int argc, char **argv)
   }
 
   uvc_close(devh);
+  return UVC_ERROR_OTHER;
 
 exit:
   uvc_exit(ctx);
