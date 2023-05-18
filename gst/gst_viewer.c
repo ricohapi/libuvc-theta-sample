@@ -38,11 +38,11 @@
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
 
-
 #include "libuvc/libuvc.h"
 #include "thetauvc.h"
 
 #define MAX_PIPELINE_LEN 1024
+#define MAX_OUTPUT_PIPELINE_LEN 512 // It must be less than previous
 #define DEFAULT_CAM_MODE "UHD"
 #define DEFAULT_BITRATE 5000000
 #define DEFAULT_KFI 300
@@ -74,17 +74,19 @@ struct stream_parameters {
   char *address;
   uint16_t port;
   uint32_t max_delay;   // us
+  char *filename;
 };
 
 void print_help()
 {
   printf("Options:\n");
   printf("\t-m: Resolution Mode. Accepted values: UHD, FHD. Default: %s\n", DEFAULT_CAM_MODE);
-  printf("\t-b: bitrate (bps). Default: %i\n", DEFAULT_BITRATE);
+  printf("\t-b: bitrate (bps). Default: %i. If set to 0, raw input from camera\n", DEFAULT_BITRATE);
   printf("\t-k: Keyframe Interval (frames). Default: %i\n", DEFAULT_KFI);
   printf("\t-a: RTP address. Default: %s\n", DEFAULT_RTP_ADDRESS);
   printf("\t-p: RTP port. Default: %i\n", DEFAULT_RTP_PORT);
   printf("\t-d: RTP max delay (us). Default: %i\n", DEFAULT_RTP_MAX_DELAY);
+  printf("\t-f: Filename. If set, only recording to disk (TS stream). No RTP will be generated\n");
   exit(0);
 }
 
@@ -116,9 +118,10 @@ gst_src_init(int *argc, char ***argv, char *pipeline)
 {
   GstCaps *caps;
   GstBus *bus;
-  char pipeline_str[MAX_PIPELINE_LEN];
+  char pipeline_str[MAX_PIPELINE_LEN+50];
 
-  snprintf(pipeline_str, MAX_PIPELINE_LEN, "appsrc name=ap ! queue ! h264parse ! queue ! %s ", pipeline);
+  snprintf(pipeline_str, MAX_PIPELINE_LEN+50,
+      "appsrc name=ap ! queue ! h264parse config-interval=1 ! queue ! %s ", pipeline);
 
   fprintf(stderr, "%s/n", pipeline_str);
 
@@ -230,7 +233,8 @@ main(int argc, char **argv)
   cam_params.address = DEFAULT_RTP_ADDRESS;
   cam_params.port = DEFAULT_RTP_PORT;
   cam_params.max_delay = DEFAULT_RTP_MAX_DELAY;
-  while ((opt = getopt(argc, argv, "b:d:m:k:a:p:h")) != -1) {
+  cam_params.filename = "\0";
+  while ((opt = getopt(argc, argv, "b:d:m:k:a:p:f:h")) != -1) {
     switch (opt) {
       case 'b': cam_params.bitrate = (uint32_t) atoi(optarg); break;
       case 'd': cam_params.max_delay = atoi(optarg); break;
@@ -247,6 +251,7 @@ main(int argc, char **argv)
       case 'k': cam_params.kfi = atoi(optarg); break;
       case 'a': cam_params.address = optarg; break;
       case 'p': cam_params.port = atoi(optarg); break;
+      case 'f': cam_params.filename = optarg; break;
       case 'h': print_help(); break;
       default:
       {
@@ -256,27 +261,41 @@ main(int argc, char **argv)
     }
   }
   if (strcmp(cmd_name, "gst_loopback") == 0)
-    sprintf(pipe_proc,
+    snprintf(pipe_proc, MAX_PIPELINE_LEN,
       "decodebin ! autovideoconvert ! "
       "video/x-raw,format=I420 ! identity drop-allocation=true !"
-      "v4l2sink device=/dev/video1 sync=false"
+      "v4l2sink device=/dev/video60 sync=false"
       );
-  else
-    sprintf(pipe_proc,
-      " omxh264dec ! "
-      "omxh264enc insert-sps-pps=true profile=main control-rate=constant-skip-frames "
-      "preset-level=FastPreset bitrate=%i iframeinterval=%i ! "
-      "h264parse config-interval=1 ! "
-      "rtph264pay pt=96 config-interval=1 ! "
-      "rtprateshape max-delay-us=%i max-bitrate=%i ! "
-      "udpsink host=%s port=%i",
-      cam_params.bitrate,
-      cam_params.kfi,
-      cam_params.max_delay,
-      cam_params.max_bitrate,
-      cam_params.address,
-      cam_params.port
-      );
+  else {
+    char output_str[MAX_OUTPUT_PIPELINE_LEN];
+    if (strlen(cam_params.filename) == 0) {
+      sprintf(output_str,
+        "h264parse config-interval=1 ! "
+        "rtph264pay pt=96 config-interval=1 ! "
+        "rtprateshape max-delay-us=%i max-bitrate=%i ! "
+        "udpsink host=%s port=%i",
+        cam_params.max_delay,
+        cam_params.max_bitrate,
+        cam_params.address,
+        cam_params.port
+        );
+    } else {
+      sprintf(output_str, "mpegtsmux ! filesink location=%s -e", cam_params.filename);
+    }
+
+    if (cam_params.bitrate == 0) {
+      snprintf(pipe_proc, MAX_PIPELINE_LEN, "%s", output_str);
+    } else {
+      snprintf(pipe_proc, MAX_PIPELINE_LEN,
+        "omxh264dec ! "
+        "omxh264enc insert-sps-pps=true profile=main control-rate=constant-skip-frames "
+        "preset-level=FastPreset bitrate=%i iframeinterval=%i ! %s",
+        cam_params.bitrate,
+        cam_params.kfi,
+        output_str
+        );
+    }
+  }
 
   if (!gst_src_init(&argc, &argv, pipe_proc))
     return -1;
