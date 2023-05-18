@@ -123,7 +123,7 @@ gst_src_init(int *argc, char ***argv, char *pipeline)
   snprintf(pipeline_str, MAX_PIPELINE_LEN+50,
       "appsrc name=ap ! queue ! h264parse config-interval=1 ! queue ! %s ", pipeline);
 
-  fprintf(stderr, "%s/n", pipeline_str);
+  fprintf(stderr, "%s\n", pipeline_str);
 
   gst_init(argc, argv);
   src.timer = g_timer_new();
@@ -270,7 +270,6 @@ main(int argc, char **argv)
     char output_str[MAX_OUTPUT_PIPELINE_LEN];
     if (strlen(cam_params.filename) == 0) {
       sprintf(output_str,
-        "h264parse config-interval=1 ! "
         "rtph264pay pt=96 config-interval=1 ! "
         "rtprateshape max-delay-us=%i max-bitrate=%i ! "
         "udpsink host=%s port=%i",
@@ -284,12 +283,14 @@ main(int argc, char **argv)
     }
 
     if (cam_params.bitrate == 0) {
-      snprintf(pipe_proc, MAX_PIPELINE_LEN, "%s", output_str);
+      // TODO There is some CAPS issue that generate wrong PTS
+      snprintf(pipe_proc, MAX_PIPELINE_LEN, "video/x-h264,framerate=30000/1001 ! %s", output_str);
     } else {
       snprintf(pipe_proc, MAX_PIPELINE_LEN,
         "omxh264dec ! "
         "omxh264enc insert-sps-pps=true profile=main control-rate=constant-skip-frames "
-        "preset-level=FastPreset bitrate=%i iframeinterval=%i ! %s",
+        "preset-level=FastPreset bitrate=%i iframeinterval=%i ! "
+        "h264parse config-interval=1 ! %s",
         cam_params.bitrate,
         cam_params.kfi,
         output_str
