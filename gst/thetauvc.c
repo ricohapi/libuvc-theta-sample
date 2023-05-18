@@ -268,6 +268,8 @@ thetauvc_get_stream_ctrl_format_size(uvc_device_handle_t *devh,
 		return UVC_ERROR_INVALID_MODE;
 
 	m = &stream_mode[mode];
+
+  fprintf(stderr, "Select Mode: %i, Width: %i, Height: %i, FPS: %i\n", mode, m->width, m->height, m->fps);
   
 	res = uvc_get_stream_ctrl_format_size(devh, ctrl,
 			UVC_FRAME_FORMAT_H264, m->width, m->height, m->fps);

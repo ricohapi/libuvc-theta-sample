@@ -223,9 +223,9 @@ main(int argc, char **argv)
 
   cam_params.bitrate = DEFAULT_BITRATE;
   cam_params.max_bitrate = cam_params.bitrate * 1.5;
-  if (strcmp(DEFAULT_CAM_MODE, "UHD"))
+  if (strcmp(DEFAULT_CAM_MODE, "UHD") == 0)
     cam_params.mode = THETAUVC_MODE_UHD_30;
-  else if (strcmp(DEFAULT_CAM_MODE, "FHD"))
+  else if (strcmp(DEFAULT_CAM_MODE, "FHD") == 0)
     cam_params.mode = THETAUVC_MODE_FHD_30;
   else
     cam_params.mode = THETAUVC_MODE_UHD_2997;
@@ -240,9 +240,9 @@ main(int argc, char **argv)
       case 'd': cam_params.max_delay = atoi(optarg); break;
       case 'm':
       {
-        if (strcmp(optarg, "UHD"))
+        if (strcmp(optarg, "UHD") == 0)
           cam_params.mode = THETAUVC_MODE_UHD_30;
-        else if (strcmp(optarg, "FHD"))
+        else if (strcmp(optarg, "FHD") == 0)
           cam_params.mode = THETAUVC_MODE_FHD_30;
         else
           cam_params.mode = THETAUVC_MODE_UHD_2997;
